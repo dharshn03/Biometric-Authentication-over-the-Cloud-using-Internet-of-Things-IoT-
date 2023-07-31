@@ -1,0 +1,107 @@
+import mysql.connector
+from Adafruit_CharLCD import Adafruit_CharLCD
+from adafruit_fingerprint import Adafruit_Fingerprint
+import pyDes
+import machine
+
+# Connect to the RDS MySQL database
+try:
+    cnx = mysql.connector.connect(
+        host="<hostname>",
+        user="<username>",
+        password="<password>",
+        database="<database>"
+    )
+except Exception as e:
+    print("Error connecting to the database: ", e)
+    machine.reset()
+
+# Set up the 1602 LCD display
+lcd = Adafruit_CharLCD(rs=26, en=19, d4=13, d5=6, d6=5, d7=21, cols=16, lines=2)
+lcd.clear()
+
+# Prompt the user to enter their ID on the 1602 display
+lcd.message("Enter user ID:")
+
+# Get user ID from the user
+user_id = input("")
+
+# Check if the user ID is valid
+cursor = cnx.cursor()
+query = "SELECT * FROM users WHERE id=%s"
+cursor.execute(query, (user_id,))
+if cursor.fetchone() is None:
+    lcd.message("Invalid user ID")
+    cursor.close()
+    cnx.close()
+    machine.reset()
+cursor.close()
+
+# Check if the user's fingerprint has already been registered
+cursor = cnx.cursor()
+query = "SELECT * FROM users WHERE id=%s AND fingerprint IS NOT NULL"
+cursor.execute(query, (user_id,))
+if cursor.fetchone() is not None:
+    lcd.message("Fingerprint already\nregistered for user\nID: {}".format(user_id))
+    cursor.close()
+    cnx.close()
+    machine.reset()
+cursor.close()
+
+# Set up the fingerprint sensor
+finger = Adafruit_Fingerprint.Adafruit_Fingerprint_Sensor(pwr=4, tx=13, rx=12)
+if (finger.verifyPassword() == False):
+    print('Did not find fingerprint sensor :(')
+    lcd.message("Fingerprint\nsensor not found")
+    cnx.close()
+    machine.reset()
+
+# Display instructions on the 1602 LCD display
+lcd.message("Place finger on\nsensor...")
+
+# Collect fingerprint
+print('Waiting for finger...')
+while (finger.getImage() == False):
+    pass
+print('Image taken')
+if (finger.image2Tz() == False):
+    print('Image conversion failed')
+    lcd.message("Image\nconversion failed")
+    cnx.close()
+    machine.reset()
+print('Image converted')
+
+# Get the stored fingerprint template
+fingerprint = finger.fingerFastSearch()
+if (fingerprint == Adafruit_Fingerprint.FINGERPRINT_NOTFOUND):
+    print('No matching fingerprint found')
+    lcd.message("No\nmatching\nfingerprint")
+    cnx.close()
+    machine.reset()
+# Encrypt the fingerprint using the secret key
+
+key = "<your_secret_key>".encode()
+fingerprint = str(fingerprint).encode()
+des3 = pyDes.triple_des(key, pyDes.CBC, "\0\0\0\0\0\0\0\0", pad=None, padmode=pyDes.PAD_PKCS5)
+encrypted_fingerprint = des3.encrypt(fingerprint)
+
+# Insert the encrypted fingerprint into the database
+
+cursor = cnx.cursor()
+update_query = "UPDATE users SET fingerprint=%s WHERE id=%s"
+cursor.execute(update_query, (encrypted_fingerprint, user_id))
+cnx.commit()
+
+# Close the database cursor and connection
+
+cursor.close()
+cnx.close()
+
+# Display success message on the 1602 LCD display
+
+lcd.clear()
+lcd.message("Fingerprint\nregistered\nfor user ID\n{}".format(user_id))
+
+# Reset the ESP32
+
+machine.reset()
