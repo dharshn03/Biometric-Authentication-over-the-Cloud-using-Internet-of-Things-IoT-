@@ -1,0 +1,66 @@
+import random
+import string
+import mysql.connector
+import tkinter as tk
+from tkinter import messagebox
+
+def register_user():
+    # Input user details
+    name = name_entry.get()
+    dob = dob_entry.get()
+    age = int(age_entry.get())
+
+    # Generate a random alphanumeric ID
+    alphabet = "ABCD"
+    random_id = ''.join(random.choices(alphabet, k=4))
+
+    # Connect to the RDS MySQL database
+    cnx = mysql.connector.connect(
+        host="authentication-db.caxqdhwqqvt8.ap-northeast-1.rds.amazonaws.com",
+        port=3306,
+        user="admin",
+        password="biometrics",
+        database="authentication-db"
+    )
+        
+
+    # Insert the user details into the database
+    cursor = cnx.cursor()
+    insert_query = "INSERT INTO users (id, name, dob, age, fingerprint) VALUES (%s, %s, %s, %s, %s)"
+    cursor.execute(insert_query, (random_id, name, dob, age, ""))
+
+    # Commit the changes and close the connection
+    cnx.commit()
+    cursor.close()
+    cnx.close()
+
+    # Display the registered user ID
+    messagebox.showinfo("User registered", "User registered with ID: " + random_id)
+
+# Create the GUI window
+root = tk.Tk()
+root.geometry("800x600")
+root.title("User Registration")
+
+# Add label and entry widgets for name, dob and age
+name_label = tk.Label(root, text="Name:")
+name_label.grid(row=0, column=0)
+name_entry = tk.Entry(root)
+name_entry.grid(row=0, column=1)
+
+dob_label = tk.Label(root, text="Date of Birth (yyyy-mm-dd):")
+dob_label.grid(row=1, column=0)
+dob_entry = tk.Entry(root)
+dob_entry.grid(row=1, column=1)
+
+age_label = tk.Label(root, text="Age:")
+age_label.grid(row=2, column=0)
+age_entry = tk.Entry(root)
+age_entry.grid(row=2, column=1)
+
+# Add a button to register the user
+register_button = tk.Button(root, text="Register", command=register_user)
+register_button.grid(row=3, column=0, columnspan=2, pady=10)
+
+# Start the GUI event loop
+root.mainloop()
